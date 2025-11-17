@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Kurz & Kalt - Roguelike</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div id="game-container">
+    <div id="title">
+      <h1>Kurz & Kalt</h1>
+      <p>Ein Roguelike auf der Raumstation</p>
+    </div>
+    
+    <div id="hud">
+      <div class="hud-item">
+        <span class="label">HP:</span>
+        <span id="player-hp">100</span>/<span id="player-max-hp">100</span>
+      </div>
+      <div class="hud-item">
+        <span class="label">Level:</span>
+        <span id="current-level">1</span>
+      </div>
+      <div class="hud-item">
+        <span class="label">Seed:</span>
+        <span id="seed-display">-</span>
+      </div>
+    </div>
+
+    <canvas id="game-canvas" width="800" height="600"></canvas>
+
+    <div id="inventory">
+      <h3>Inventar (1-3)</h3>
+      <div class="inventory-slots">
+        <div class="slot" data-slot="0">Leer</div>
+        <div class="slot" data-slot="1">Leer</div>
+        <div class="slot" data-slot="2">Leer</div>
+      </div>
+    </div>
+
+    <div id="message-log">
+      <div class="message">Willkommen auf der Raumstation. Nutze WASD oder Pfeiltasten zum Bewegen.</div>
+    </div>
+
+    <div id="controls">
+      <p><strong>Steuerung:</strong> WASD/Pfeiltasten = Bewegen | E = Item aufheben | 1-3 = Item benutzen | ~ = Debug</p>
+    </div>
+
+    <!-- Game Over Screen -->
+    <div id="game-over" class="hidden">
+      <div class="game-over-content">
+        <h2>GAME OVER</h2>
+        <p id="death-message">Du bist gestorben.</p>
+        <button id="restart-button">Neu Starten</button>
+      </div>
+    </div>
+
+    <!-- Debug Panel -->
+    <div id="debug-panel" class="hidden">
+      <h3>Debug Info</h3>
+      <div id="debug-content"></div>
+    </div>
+  </div>
+
+  <script src="utils.js"></script>
+  <script src="game.js"></script>
+</body>
+</html>

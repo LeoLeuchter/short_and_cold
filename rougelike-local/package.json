@@ -1,0 +1,19 @@
+{
+  "name": "kurz-und-kalt",
+  "version": "1.0.0",
+  "description": "Ein browserbasiertes Roguelike - Kurz & Kalt",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "nodemon server.js"
+  },
+  "keywords": ["roguelike", "game", "canvas"],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "express": "^4.18.2"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.1"
+  }
+}
