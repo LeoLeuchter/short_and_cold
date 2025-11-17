@@ -14,28 +14,17 @@ const FOV_RADIUS = 8;
 
 const TILE_TYPES = {
   WALL: 0,
-  FLOOR: 1,
-  DOOR: 2
-};
-
-const COLORS = {
-  WALL: '#2d3748',
-  FLOOR: '#4a5568',
-  DOOR: '#805ad5',
-  PLAYER: '#00ffcc',
-  ENEMY: '#ff6b6b',
-  ITEM_MEDKIT: '#51cf66',
-  ITEM_BATTERY: '#ffd43b',
-  ITEM_EMP: '#748ffc',
-  FOG: 'rgba(0, 0, 0, 0.7)',
-  EXPLORED: 'rgba(0, 0, 0, 0.4)'
+  FLOOR: 1
 };
 
 // ============================================================================
 // GLOBALE VARIABLEN
 // ============================================================================
 
-let canvas, ctx;
+let canvas, ctx, renderer;
+let tweenManager, particleSystem;
+let lastFrameTime = 0;
+
 let game = {
   map: [],
   rooms: [],
@@ -46,8 +35,9 @@ let game = {
   rng: null,
   gameOver: false,
   turn: 0,
-  explored: [], // Welche Tiles wurden schon gesehen
-  visible: [],  // Welche Tiles sind aktuell sichtbar
+  kills: 0,
+  explored: [],
+  visible: [],
   debugMode: false
 };
 
@@ -58,6 +48,10 @@ let game = {
 window.addEventListener('DOMContentLoaded', () => {
   canvas = document.getElementById('game-canvas');
   ctx = canvas.getContext('2d');
+  
+  renderer = new Renderer(canvas, ctx, TILE_SIZE);
+  tweenManager = new TweenManager();
+  particleSystem = new ParticleSystem();
   
   // Seed setzen
   game.seed = getSeedFromURL();
@@ -70,9 +64,19 @@ window.addEventListener('DOMContentLoaded', () => {
   // Event Listener
   document.addEventListener('keydown', handleInput);
   document.getElementById('restart-button').addEventListener('click', restartGame);
+  document.getElementById('new-seed-button').addEventListener('click', restartWithNewSeed);
   
-  // Ersten Frame rendern
-  render();
+  // Debug DevCheck
+  const devCheckBtn = document.getElementById('run-devcheck');
+  if (devCheckBtn) {
+    devCheckBtn.addEventListener('click', () => {
+      const result = devCheck();
+      alert(`DevCheck ${result.passed ? 'BESTANDEN' : 'FEHLGESCHLAGEN'}\n\nRäume: ${result.rooms}\nFloor Tiles: ${result.floorTiles}\nItems: ${result.items}\nItems auf Wänden: ${result.itemsOnWalls}`);
+    });
+  }
+  
+  // Game Loop starten
+  requestAnimationFrame(gameLoop);
   
   addMessage('Spiel gestartet. Seed: ' + game.seed);
 });
@@ -80,8 +84,12 @@ window.addEventListener('DOMContentLoaded', () => {
 function initGame() {
   game.gameOver = false;
   game.turn = 0;
+  game.kills = 0;
   game.enemies = [];
   game.items = [];
+  
+  tweenManager.clear();
+  particleSystem.clear();
   
   // Map generieren
   generateMap();
@@ -91,16 +99,21 @@ function initGame() {
   game.player = {
     x: Math.floor(startRoom.x + startRoom.w / 2),
     y: Math.floor(startRoom.y + startRoom.h / 2),
+    renderX: undefined,
+    renderY: undefined,
     hp: 100,
     maxHp: 100,
     inventory: [null, null, null],
     attack: 10
   };
   
+  game.player.renderX = game.player.x;
+  game.player.renderY = game.player.y;
+  
   // Gegner spawnen
   spawnEnemies();
   
-  // Items spawnen
+  // Items spawnen (FIX: Nur auf Floor-Tiles)
   spawnItems();
   
   // FOV initialisieren
@@ -126,11 +139,28 @@ function initFOV() {
 }
 
 // ============================================================================
-// MAP GENERATION (BSP + Raum-Korridor-Algorithmus)
+// GAME LOOP (für Animationen)
+// ============================================================================
+
+function gameLoop(timestamp) {
+  const deltaTime = timestamp - lastFrameTime;
+  lastFrameTime = timestamp;
+  
+  // Update Animationen
+  tweenManager.update(deltaTime);
+  particleSystem.update(deltaTime);
+  
+  // Render
+  render();
+  
+  requestAnimationFrame(gameLoop);
+}
+
+// ============================================================================
+// MAP GENERATION
 // ============================================================================
 
 function generateMap() {
-  // Leere Map initialisieren (alles Wände)
   game.map = [];
   for (let y = 0; y < MAP_HEIGHT; y++) {
     game.map[y] = [];
@@ -141,7 +171,6 @@ function generateMap() {
   
   game.rooms = [];
   
-  // Räume generieren
   for (let i = 0; i < MAX_ROOMS; i++) {
     const w = game.rng.nextRange(ROOM_MIN_SIZE, ROOM_MAX_SIZE);
     const h = game.rng.nextRange(ROOM_MIN_SIZE, ROOM_MAX_SIZE);
@@ -150,7 +179,6 @@ function generateMap() {
     
     const newRoom = { x, y, w, h };
     
-    // Prüfen ob Raum mit existierenden überlappt
     let overlaps = false;
     for (const room of game.rooms) {
       if (roomsIntersect(newRoom, room)) {
@@ -162,7 +190,6 @@ function generateMap() {
     if (!overlaps) {
       carveRoom(newRoom);
       
-      // Korridor zum vorherigen Raum
       if (game.rooms.length > 0) {
         const prevRoom = game.rooms[game.rooms.length - 1];
         connectRooms(prevRoom, newRoom);
@@ -191,7 +218,6 @@ function connectRooms(room1, room2) {
   const x2 = Math.floor(room2.x + room2.w / 2);
   const y2 = Math.floor(room2.y + room2.h / 2);
   
-  // Horizontaler Korridor
   const startX = Math.min(x1, x2);
   const endX = Math.max(x1, x2);
   for (let x = startX; x <= endX; x++) {
@@ -200,7 +226,6 @@ function connectRooms(room1, room2) {
     }
   }
   
-  // Vertikaler Korridor
   const startY = Math.min(y1, y2);
   const endY = Math.max(y1, y2);
   for (let y = startY; y <= endY; y++) {
@@ -208,13 +233,6 @@ function connectRooms(room1, room2) {
       game.map[y][x2] = TILE_TYPES.FLOOR;
     }
   }
-}
-
-function roomsIntersect(room1, room2) {
-  return (room1.x <= room2.x + room2.w + 1 &&
-          room1.x + room1.w + 1 >= room2.x &&
-          room1.y <= room2.y + room2.h + 1 &&
-          room1.y + room1.h + 1 >= room2.y);
 }
 
 // ============================================================================
@@ -225,18 +243,29 @@ function spawnEnemies() {
   const numEnemies = game.rng.nextRange(5, 10);
   
   for (let i = 0; i < numEnemies; i++) {
-    const room = game.rooms[game.rng.nextRange(1, game.rooms.length)]; // Nicht im ersten Raum
-    const x = game.rng.nextRange(room.x, room.x + room.w);
-    const y = game.rng.nextRange(room.y, room.y + room.h);
+    const roomIndex = game.rng.nextRange(1, game.rooms.length);
+    const room = game.rooms[roomIndex];
     
-    if (game.map[y][x] === TILE_TYPES.FLOOR && !isPositionOccupied(x, y)) {
-      game.enemies.push({
-        x, y,
-        hp: 30,
-        maxHp: 30,
-        attack: 5,
-        type: 'drone'
-      });
+    let attempts = 0;
+    let spawned = false;
+    
+    while (attempts < 50 && !spawned) {
+      const x = game.rng.nextRange(room.x, room.x + room.w);
+      const y = game.rng.nextRange(room.y, room.y + room.h);
+      
+      if (game.map[y][x] === TILE_TYPES.FLOOR && !isPositionOccupied(x, y)) {
+        game.enemies.push({
+          x, y,
+          renderX: x,
+          renderY: y,
+          hp: 30,
+          maxHp: 30,
+          attack: 5,
+          type: 'drone'
+        });
+        spawned = true;
+      }
+      attempts++;
     }
   }
   
@@ -244,6 +273,7 @@ function spawnEnemies() {
 }
 
 function spawnItems() {
+  // FIX: Items spawnen nur auf Floor-Tiles, mit Retry-Logik
   const itemTypes = [
     { type: 'medkit', count: 3 },
     { type: 'battery', count: 2 },
@@ -252,12 +282,21 @@ function spawnItems() {
   
   itemTypes.forEach(({ type, count }) => {
     for (let i = 0; i < count; i++) {
-      const room = game.rooms[game.rng.nextRange(1, game.rooms.length)];
-      const x = game.rng.nextRange(room.x, room.x + room.w);
-      const y = game.rng.nextRange(room.y, room.y + room.h);
+      const roomIndex = game.rng.nextRange(1, game.rooms.length);
+      const room = game.rooms[roomIndex];
       
-      if (game.map[y][x] === TILE_TYPES.FLOOR && !isPositionOccupied(x, y)) {
-        game.items.push({ x, y, type });
+      let attempts = 0;
+      let spawned = false;
+      
+      while (attempts < 50 && !spawned) {
+        const x = game.rng.nextRange(room.x, room.x + room.w);
+        const y = game.rng.nextRange(room.y, room.y + room.h);
+        
+        if (game.map[y][x] === TILE_TYPES.FLOOR && !isPositionOccupied(x, y)) {
+          game.items.push({ x, y, type });
+          spawned = true;
+        }
+        attempts++;
       }
     }
   });
@@ -266,18 +305,16 @@ function spawnItems() {
 }
 
 // ============================================================================
-// FIELD OF VIEW (einfacher Raycasting-Ansatz)
+// FIELD OF VIEW
 // ============================================================================
 
 function updateFOV() {
-  // Alle Tiles als nicht sichtbar markieren
   for (let y = 0; y < MAP_HEIGHT; y++) {
     for (let x = 0; x < MAP_WIDTH; x++) {
       game.visible[y][x] = false;
     }
   }
   
-  // Sichtbare Tiles markieren
   const px = game.player.x;
   const py = game.player.y;
   
@@ -286,19 +323,15 @@ function updateFOV() {
       if (x < 0 || x >= MAP_WIDTH || y < 0 || y >= MAP_HEIGHT) continue;
       
       const dist = distance(px, py, x, y);
-      if (dist <= FOV_RADIUS) {
-        // Einfacher FOV: Prüfe ob Sichtlinie frei (vereinfacht)
-        if (hasLineOfSight(px, py, x, y)) {
-          game.visible[y][x] = true;
-          game.explored[y][x] = true;
-        }
+      if (dist <= FOV_RADIUS && hasLineOfSight(px, py, x, y)) {
+        game.visible[y][x] = true;
+        game.explored[y][x] = true;
       }
     }
   }
 }
 
 function hasLineOfSight(x0, y0, x1, y1) {
-  // Bresenham-ähnlicher Algorithmus (vereinfacht)
   const dx = Math.abs(x1 - x0);
   const dy = Math.abs(y1 - y0);
   const sx = x0 < x1 ? 1 : -1;
@@ -310,7 +343,6 @@ function hasLineOfSight(x0, y0, x1, y1) {
   
   while (true) {
     if (x === x1 && y === y1) return true;
-    
     if (game.map[y][x] === TILE_TYPES.WALL) return false;
     
     const e2 = 2 * err;
@@ -330,12 +362,20 @@ function hasLineOfSight(x0, y0, x1, y1) {
 // ============================================================================
 
 function handleInput(e) {
-  if (game.gameOver) return;
+  if (game.gameOver) {
+    if (e.key === 'r' || e.key === 'R') {
+      restartGame();
+    }
+    return;
+  }
+  
+  // Keine Eingabe während Animationen
+  if (tweenManager.isAnimating()) return;
   
   let dx = 0, dy = 0;
   let action = null;
   
-  // Bewegung
+  // FIX: Bewegung konsistent für WASD UND Pfeiltasten
   if (e.key === 'w' || e.key === 'W' || e.key === 'ArrowUp') {
     dy = -1;
   } else if (e.key === 's' || e.key === 'S' || e.key === 'ArrowDown') {
@@ -344,28 +384,20 @@ function handleInput(e) {
     dx = -1;
   } else if (e.key === 'd' || e.key === 'D' || e.key === 'ArrowRight') {
     dx = 1;
-  }
-  
-  // Item aufheben
-  else if (e.key === 'e' || e.key === 'E') {
+  } else if (e.key === 'e' || e.key === 'E') {
     action = 'pickup';
-  }
-  
-  // Item benutzen
-  else if (e.key === '1' || e.key === '2' || e.key === '3') {
+  } else if (e.key === '1' || e.key === '2' || e.key === '3') {
     const slot = parseInt(e.key) - 1;
-    action = 'use';
     useItem(slot);
     return;
-  }
-  
-  // Debug Toggle
-  else if (e.key === '~' || e.key === '`') {
+  } else if (e.key === 'r' || e.key === 'R') {
+    restartGame();
+    return;
+  } else if (e.key === '~' || e.key === '`') {
     toggleDebug();
     return;
   }
   
-  // Spielzug ausführen
   if (dx !== 0 || dy !== 0) {
     movePlayer(dx, dy);
     enemyTurn();
@@ -375,38 +407,43 @@ function handleInput(e) {
   } else if (action === 'pickup') {
     pickupItem();
   }
-  
-  render();
 }
 
 function movePlayer(dx, dy) {
   const newX = game.player.x + dx;
   const newY = game.player.y + dy;
   
-  // Prüfe Kollision mit Wänden
   if (newX < 0 || newX >= MAP_WIDTH || newY < 0 || newY >= MAP_HEIGHT) return;
   if (game.map[newY][newX] === TILE_TYPES.WALL) return;
   
-  // Prüfe Kollision mit Gegnern -> Angriff
   const enemy = getEnemyAt(newX, newY);
   if (enemy) {
     attackEnemy(enemy);
     return;
   }
   
-  // Bewege Spieler
   game.player.x = newX;
   game.player.y = newY;
+  
+  // Animate movement
+  tweenManager.add(game.player, newX, newY, 120);
 }
 
 function attackEnemy(enemy) {
   const damage = game.player.attack + game.rng.nextRange(-2, 3);
   enemy.hp -= damage;
+  
+  particleSystem.createHitEffect(enemy.x + 0.5, enemy.y + 0.5);
+  particleSystem.showDamage(enemy.x, enemy.y, damage, false);
+  
   addMessage(`Du greifst Drohne an: ${damage} Schaden!`, 'combat');
   
   if (enemy.hp <= 0) {
     addMessage('Drohne zerstört!', 'combat');
+    particleSystem.createExplosion(enemy.x + 0.5, enemy.y + 0.5, '#ff6b6b', 16);
     game.enemies = game.enemies.filter(e => e !== enemy);
+    game.kills++;
+    document.getElementById('kill-count').textContent = game.kills;
   }
 }
 
@@ -414,11 +451,9 @@ function enemyTurn() {
   game.enemies.forEach(enemy => {
     const dist = distance(enemy.x, enemy.y, game.player.x, game.player.y);
     
-    // Wenn Spieler in Sichtweite, bewege dich zu ihm
     if (dist < FOV_RADIUS && game.visible[enemy.y][enemy.x]) {
       moveEnemyTowardsPlayer(enemy);
     } else {
-      // Zufällige Bewegung
       const dirs = [[-1,0], [1,0], [0,-1], [0,1]];
       const dir = game.rng.choice(dirs);
       const newX = enemy.x + dir[0];
@@ -427,6 +462,7 @@ function enemyTurn() {
       if (isWalkable(newX, newY) && !isPositionOccupied(newX, newY)) {
         enemy.x = newX;
         enemy.y = newY;
+        tweenManager.add(enemy, newX, newY, 150);
       }
     }
   });
@@ -447,10 +483,13 @@ function moveEnemyTowardsPlayer(enemy) {
   const newX = enemy.x + moveX;
   const newY = enemy.y + moveY;
   
-  // Wenn auf Spieler-Position -> Angriff
   if (newX === game.player.x && newY === game.player.y) {
     const damage = enemy.attack + game.rng.nextRange(-1, 2);
     game.player.hp -= damage;
+    
+    particleSystem.createHitEffect(game.player.x + 0.5, game.player.y + 0.5);
+    particleSystem.showDamage(game.player.x, game.player.y, damage, true);
+    
     addMessage(`Drohne greift an: ${damage} Schaden erhalten!`, 'combat');
     
     if (game.player.hp <= 0) {
@@ -461,10 +500,10 @@ function moveEnemyTowardsPlayer(enemy) {
     return;
   }
   
-  // Sonst bewegen
   if (isWalkable(newX, newY) && !isPositionOccupied(newX, newY)) {
     enemy.x = newX;
     enemy.y = newY;
+    tweenManager.add(enemy, newX, newY, 150);
   }
 }
 
@@ -479,15 +518,20 @@ function pickupItem() {
     return;
   }
   
-  // Freien Slot finden
   const emptySlot = game.player.inventory.findIndex(slot => slot === null);
   if (emptySlot === -1) {
-    addMessage('Inventar voll!', 'item');
+    addMessage('Inventar voll!', 'warning');
     return;
   }
   
   game.player.inventory[emptySlot] = item.type;
   game.items = game.items.filter(i => i !== item);
+  
+  let color = '#51cf66';
+  if (item.type === 'battery') color = '#ffd43b';
+  if (item.type === 'emp') color = '#748ffc';
+  
+  particleSystem.createPickup(item.x + 0.5, item.y + 0.5, color);
   addMessage(`${item.type.toUpperCase()} aufgehoben!`, 'item');
   updateInventoryDisplay();
 }
@@ -503,31 +547,34 @@ function useItem(slot) {
     case 'medkit':
       const healAmount = 30;
       game.player.hp = Math.min(game.player.hp + healAmount, game.player.maxHp);
+      particleSystem.createPickup(game.player.x + 0.5, game.player.y + 0.5, '#51cf66');
       addMessage(`Medkit benutzt: +${healAmount} HP`, 'item');
       break;
       
     case 'battery':
       game.player.maxHp += 10;
       game.player.hp += 10;
+      particleSystem.createPickup(game.player.x + 0.5, game.player.y + 0.5, '#ffd43b');
       addMessage('Batterie benutzt: +10 Max HP', 'item');
       break;
       
     case 'emp':
-      // EMP: Schade alle Gegner in Sichtweite
       let empCount = 0;
       game.enemies.forEach(enemy => {
         if (game.visible[enemy.y][enemy.x]) {
           enemy.hp -= 20;
+          particleSystem.createExplosion(enemy.x + 0.5, enemy.y + 0.5, '#748ffc', 12);
           empCount++;
           if (enemy.hp <= 0) {
             game.enemies = game.enemies.filter(e => e !== enemy);
+            game.kills++;
           }
         }
       });
       addMessage(`EMP ausgelöst: ${empCount} Drohnen beschädigt!`, 'combat');
+      document.getElementById('kill-count').textContent = game.kills;
       break;
-  }
-  
+    }
   game.player.inventory[slot] = null;
   updateInventoryDisplay();
   updateHUD();
@@ -536,7 +583,6 @@ function useItem(slot) {
   enemyTurn();
   game.turn++;
   updateFOV();
-  render();
 }
 
 // ============================================================================
@@ -563,99 +609,44 @@ function getEnemyAt(x, y) {
 // ============================================================================
 
 function render() {
-  ctx.fillStyle = '#000';
-  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  renderer.clear();
   
-  const camX = Math.max(0, Math.min(game.player.x - Math.floor(canvas.width / TILE_SIZE / 2), MAP_WIDTH - Math.floor(canvas.width / TILE_SIZE)));
-  const camY = Math.max(0, Math.min(game.player.y - Math.floor(canvas.height / TILE_SIZE / 2), MAP_HEIGHT - Math.floor(canvas.height / TILE_SIZE)));
+  const camera = renderer.calculateCamera(game.player, MAP_WIDTH, MAP_HEIGHT);
   
   // Map rendern
-  for (let y = 0; y < Math.ceil(canvas.height / TILE_SIZE); y++) {
-    for (let x = 0; x < Math.ceil(canvas.width / TILE_SIZE); x++) {
-      const mapX = camX + x;
-      const mapY = camY + y;
-      
-      if (mapX >= 0 && mapX < MAP_WIDTH && mapY >= 0 && mapY < MAP_HEIGHT) {
-        const tile = game.map[mapY][mapX];
-        const explored = game.explored[mapY][mapX];
-        const visible = game.visible[mapY][mapX];
-        
-        if (!explored) continue;
-        
-        // Tile zeichnen
-        if (tile === TILE_TYPES.WALL) {
-          ctx.fillStyle = COLORS.WALL;
-        } else if (tile === TILE_TYPES.FLOOR) {
-          ctx.fillStyle = COLORS.FLOOR;
-        }
-        
-        ctx.fillRect(x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE);
-        
-        // Fog of War
-        if (!visible) {
-          ctx.fillStyle = COLORS.EXPLORED;
-          ctx.fillRect(x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE);
-        }
-      }
-    }
-  }
+  renderer.renderMap(game.map, game.explored, game.visible, camera);
   
   // Items rendern
-  game.items.forEach(item => {
-    const screenX = (item.x - camX) * TILE_SIZE;
-    const screenY = (item.y - camY) * TILE_SIZE;
-    
-    if (game.visible[item.y][item.x]) {
-      let color = COLORS.ITEM_MEDKIT;
-      if (item.type === 'battery') color = COLORS.ITEM_BATTERY;
-      if (item.type === 'emp') color = COLORS.ITEM_EMP;
-      
-      ctx.fillStyle = color;
-      ctx.fillRect(screenX + 8, screenY + 8, 16, 16);
-    }
-  });
+  renderer.renderItems(game.items, game.visible, camera);
   
   // Gegner rendern
-  game.enemies.forEach(enemy => {
-    const screenX = (enemy.x - camX) * TILE_SIZE;
-    const screenY = (enemy.y - camY) * TILE_SIZE;
-    
-    if (game.visible[enemy.y][enemy.x]) {
-      ctx.fillStyle = COLORS.ENEMY;
-      ctx.fillRect(screenX + 4, screenY + 4, 24, 24);
-      
-      // HP-Bar
-      const hpPercent = enemy.hp / enemy.maxHp;
-      ctx.fillStyle = '#2d2d2d';
-      ctx.fillRect(screenX, screenY - 4, TILE_SIZE, 3);
-      ctx.fillStyle = '#ff6b6b';
-      ctx.fillRect(screenX, screenY - 4, TILE_SIZE * hpPercent, 3);
-    }
-  });
+  renderer.renderEnemies(game.enemies, game.visible, camera);
   
   // Spieler rendern
-  const playerScreenX = (game.player.x - camX) * TILE_SIZE;
-  const playerScreenY = (game.player.y - camY) * TILE_SIZE;
-  ctx.fillStyle = COLORS.PLAYER;
-  ctx.fillRect(playerScreenX + 6, playerScreenY + 6, 20, 20);
+  renderer.renderPlayer(game.player, camera);
+  
+  // Partikel rendern
+  particleSystem.render(ctx, camera.camX, camera.camY, TILE_SIZE);
 }
 
 function updateHUD() {
   document.getElementById('player-hp').textContent = Math.max(0, game.player.hp);
   document.getElementById('player-max-hp').textContent = game.player.maxHp;
   document.getElementById('current-level').textContent = 1;
+  document.getElementById('kill-count').textContent = game.kills;
 }
 
 function updateInventoryDisplay() {
   for (let i = 0; i < 3; i++) {
     const slot = document.querySelector(`[data-slot="${i}"]`);
+    const slotContent = slot.querySelector('.slot-content');
     const item = game.player.inventory[i];
     
     if (item) {
-      slot.textContent = item.toUpperCase();
+      slotContent.textContent = item.toUpperCase();
       slot.classList.add('has-item');
     } else {
-      slot.textContent = 'Leer';
+      slotContent.textContent = 'Leer';
       slot.classList.remove('has-item');
     }
   }
@@ -683,10 +674,25 @@ function gameOver() {
   game.gameOver = true;
   document.getElementById('game-over').classList.remove('hidden');
   document.getElementById('death-message').textContent = 
-    `Du wurdest von Drohnen überwältigt. Überlebt: ${game.turn} Züge.`;
+    `Du wurdest von Drohnen überwältigt.`;
+  document.getElementById('final-kills').textContent = game.kills;
+  document.getElementById('final-turns').textContent = game.turn;
 }
 
 function restartGame() {
+  document.getElementById('game-over').classList.add('hidden');
+  
+  // Gleicher Seed, neue Partie
+  game.rng = new SeededRandom(game.seed);
+  
+  // Log leeren
+  document.getElementById('message-log').innerHTML = '';
+  
+  initGame();
+  addMessage('Neues Spiel gestartet. Seed: ' + game.seed);
+}
+
+function restartWithNewSeed() {
   document.getElementById('game-over').classList.add('hidden');
   
   // Neuen Seed generieren
@@ -698,8 +704,7 @@ function restartGame() {
   document.getElementById('message-log').innerHTML = '';
   
   initGame();
-  render();
-  addMessage('Neues Spiel gestartet. Seed: ' + game.seed);
+  addMessage('Neues Spiel mit neuem Seed gestartet: ' + game.seed);
 }
 
 // ============================================================================
@@ -725,45 +730,15 @@ function updateDebug() {
   content.innerHTML = `
     <div><strong>Seed:</strong> ${game.seed}</div>
     <div><strong>Turn:</strong> ${game.turn}</div>
+    <div><strong>Kills:</strong> ${game.kills}</div>
     <div><strong>Player Pos:</strong> (${game.player.x}, ${game.player.y})</div>
     <div><strong>Player HP:</strong> ${game.player.hp}/${game.player.maxHp}</div>
     <div><strong>Enemies:</strong> ${game.enemies.length}</div>
     <div><strong>Items:</strong> ${game.items.length}</div>
     <div><strong>Rooms:</strong> ${game.rooms.length}</div>
     <div><strong>Map Size:</strong> ${MAP_WIDTH}x${MAP_HEIGHT}</div>
+    <div><strong>Tweens Active:</strong> ${tweenManager.tweens.length}</div>
+    <div><strong>Particles:</strong> ${particleSystem.particles.length}</div>
+    <div><strong>Damage Numbers:</strong> ${particleSystem.damageNumbers.length}</div>
   `;
 }
-
-// ============================================================================
-// EINFACHER TEST (Console Output)
-// ============================================================================
-
-/**
- * Testet ob Map-Generator mindestens 100 begehbare Tiles erzeugt
- */
-function testMapGeneration() {
-  const testRng = new SeededRandom(12345);
-  const oldRng = game.rng;
-  game.rng = testRng;
-  
-  generateMap();
-  
-  let walkableTiles = 0;
-  for (let y = 0; y < MAP_HEIGHT; y++) {
-    for (let x = 0; x < MAP_WIDTH; x++) {
-      if (game.map[y][x] === TILE_TYPES.FLOOR) {
-        walkableTiles++;
-      }
-    }
-  }
-  
-  console.log(`✓ Map-Test: ${walkableTiles} begehbare Tiles generiert (Minimum: 100)`);
-  
-  game.rng = oldRng;
-  return walkableTiles >= 100;
-}
-
-// Test beim Laden ausführen
-window.addEventListener('load', () => {
-  setTimeout(() => testMapGeneration(), 1000);
-});
