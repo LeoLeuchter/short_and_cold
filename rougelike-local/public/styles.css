@@ -7,7 +7,7 @@
 
 body {
   font-family: 'Courier New', monospace;
-  background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+  background: linear-gradient(135deg, #0a0e1a 0%, #1a1f2e 50%, #0f1419 100%);
   color: #eee;
   display: flex;
   justify-content: center;
@@ -19,109 +19,163 @@ body {
 #game-container {
   max-width: 900px;
   width: 100%;
-  background: #0f1419;
+  background: rgba(15, 20, 25, 0.95);
   border: 2px solid #00ffcc;
   border-radius: 8px;
   padding: 20px;
-  box-shadow: 0 0 30px rgba(0, 255, 204, 0.3);
+  box-shadow: 0 0 40px rgba(0, 255, 204, 0.4), inset 0 0 20px rgba(0, 255, 204, 0.1);
 }
 
 #title {
   text-align: center;
   margin-bottom: 15px;
-  border-bottom: 1px solid #00ffcc;
+  border-bottom: 2px solid #00ffcc;
   padding-bottom: 10px;
+  position: relative;
 }
 
 #title h1 {
   color: #00ffcc;
-  font-size: 2em;
-  text-shadow: 0 0 10px #00ffcc;
+  font-size: 2.2em;
+  text-shadow: 0 0 15px #00ffcc, 0 0 30px rgba(0, 255, 204, 0.5);
+  animation: glow 2s ease-in-out infinite alternate;
+}
+
+@keyframes glow {
+  from { text-shadow: 0 0 10px #00ffcc, 0 0 20px rgba(0, 255, 204, 0.5); }
+  to { text-shadow: 0 0 20px #00ffcc, 0 0 40px rgba(0, 255, 204, 0.8); }
 }
 
 #title p {
   color: #888;
   font-size: 0.9em;
+  margin-top: 5px;
 }
 
 #hud {
   display: flex;
   justify-content: space-around;
   margin-bottom: 15px;
-  padding: 10px;
-  background: #1a1f2e;
-  border-radius: 4px;
-  border: 1px solid #333;
+  padding: 12px;
+  background: linear-gradient(135deg, #1a1f2e 0%, #12161f 100%);
+  border-radius: 6px;
+  border: 1px solid #00ffcc50;
+  box-shadow: inset 0 2px 5px rgba(0, 0, 0, 0.3);
 }
 
 .hud-item {
   font-size: 1.1em;
+  display: flex;
+  align-items: center;
+  gap: 5px;
 }
 
 .label {
   color: #00ffcc;
   font-weight: bold;
+  text-shadow: 0 0 5px #00ffcc;
 }
 
 #game-canvas {
   display: block;
   margin: 0 auto;
   background: #000;
-  border: 2px solid #333;
-  border-radius: 4px;
+  border: 2px solid #00ffcc;
+  border-radius: 6px;
+  box-shadow: 0 0 20px rgba(0, 255, 204, 0.3), inset 0 0 30px rgba(0, 0, 0, 0.5);
   image-rendering: pixelated;
   image-rendering: crisp-edges;
 }
 
 #inventory {
   margin-top: 15px;
-  padding: 10px;
-  background: #1a1f2e;
-  border-radius: 4px;
-  border: 1px solid #333;
+  padding: 12px;
+  background: linear-gradient(135deg, #1a1f2e 0%, #12161f 100%);
+  border-radius: 6px;
+  border: 1px solid #00ffcc50;
 }
 
 #inventory h3 {
   color: #00ffcc;
-  margin-bottom: 8px;
+  margin-bottom: 10px;
   font-size: 1em;
+  text-shadow: 0 0 5px #00ffcc;
 }
 
 .inventory-slots {
   display: flex;
-  gap: 10px;
+  gap: 12px;
 }
 
 .slot {
   flex: 1;
-  padding: 10px;
+  padding: 12px;
   background: #0f1419;
   border: 2px solid #444;
-  border-radius: 4px;
+  border-radius: 6px;
   text-align: center;
   font-size: 0.9em;
-  transition: all 0.2s;
+  transition: all 0.3s;
+  position: relative;
+  min-height: 60px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.slot:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 8px rgba(0, 255, 204, 0.2);
+}
+
+.slot-number {
+  position: absolute;
+  top: 2px;
+  left: 4px;
+  font-size: 0.7em;
+  color: #666;
+  font-weight: bold;
 }
 
 .slot.has-item {
   border-color: #00ffcc;
-  background: #1a2f2e;
+  background: linear-gradient(135deg, #1a2f2e 0%, #0f1f1e 100%);
+  box-shadow: 0 0 10px rgba(0, 255, 204, 0.3);
+}
+
+.slot.has-item .slot-content {
+  color: #00ffcc;
+  font-weight: bold;
+  text-transform: uppercase;
 }
 
 #message-log {
   margin-top: 15px;
-  padding: 10px;
-  background: #1a1f2e;
-  border-radius: 4px;
-  border: 1px solid #333;
-  max-height: 100px;
+  padding: 12px;
+  background: linear-gradient(135deg, #1a1f2e 0%, #12161f 100%);
+  border-radius: 6px;
+  border: 1px solid #00ffcc50;
+  max-height: 120px;
   overflow-y: auto;
 }
 
 .message {
-  padding: 3px 0;
+  padding: 4px 0;
   font-size: 0.9em;
   border-bottom: 1px solid #222;
+  animation: messageSlide 0.3s ease-out;
+}
+
+@keyframes messageSlide {
+  from {
+    opacity: 0;
+    transform: translateX(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
 }
 
 .message:last-child {
@@ -130,18 +184,23 @@ body {
 
 .message.combat {
   color: #ff6b6b;
+  font-weight: bold;
 }
 
 .message.item {
   color: #51cf66;
 }
 
+.message.warning {
+  color: #ffd43b;
+}
+
 #controls {
   margin-top: 15px;
   padding: 10px;
-  background: #1a1f2e;
-  border-radius: 4px;
-  border: 1px solid #333;
+  background: linear-gradient(135deg, #1a1f2e 0%, #12161f 100%);
+  border-radius: 6px;
+  border: 1px solid #00ffcc50;
   font-size: 0.85em;
   color: #888;
   text-align: center;
@@ -154,11 +213,17 @@ body {
   left: 0;
   width: 100%;
   height: 100%;
-  background: rgba(0, 0, 0, 0.9);
+  background: rgba(0, 0, 0, 0.95);
   display: flex;
   justify-content: center;
   align-items: center;
   z-index: 1000;
+  animation: fadeIn 0.5s ease-out;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
 }
 
 #game-over.hidden {
@@ -166,43 +231,79 @@ body {
 }
 
 .game-over-content {
-  background: #1a1f2e;
+  background: linear-gradient(135deg, #1a1f2e 0%, #12161f 100%);
   padding: 40px;
-  border-radius: 8px;
-  border: 2px solid #ff6b6b;
+  border-radius: 10px;
+  border: 3px solid #ff6b6b;
   text-align: center;
-  box-shadow: 0 0 40px rgba(255, 107, 107, 0.5);
+  box-shadow: 0 0 60px rgba(255, 107, 107, 0.6), inset 0 0 30px rgba(255, 107, 107, 0.1);
+  animation: scaleIn 0.5s ease-out;
+}
+
+@keyframes scaleIn {
+  from {
+    transform: scale(0.8);
+    opacity: 0;
+  }
+  to {
+    transform: scale(1);
+    opacity: 1;
+  }
 }
 
 .game-over-content h2 {
   color: #ff6b6b;
   font-size: 2.5em;
   margin-bottom: 20px;
-  text-shadow: 0 0 20px #ff6b6b;
+  text-shadow: 0 0 25px #ff6b6b, 0 0 50px rgba(255, 107, 107, 0.5);
+  animation: pulse 1.5s ease-in-out infinite;
 }
 
-#death-message {
+@keyframes pulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.05); }
+}
+
+#death-message, #stats-message {
   font-size: 1.2em;
-  margin-bottom: 30px;
+  margin-bottom: 20px;
+  color: #ccc;
 }
 
-#restart-button {
-  background: #00ffcc;
+#stats-message {
+  font-size: 1em;
+  color: #00ffcc;
+}
+
+#restart-button, #new-seed-button {
+  background: linear-gradient(135deg, #00ffcc 0%, #00d4aa 100%);
   color: #0f1419;
   border: none;
-  padding: 15px 40px;
+  padding: 15px 30px;
+  margin: 5px;
   font-size: 1.1em;
   font-family: 'Courier New', monospace;
   font-weight: bold;
-  border-radius: 4px;
+  border-radius: 6px;
   cursor: pointer;
   transition: all 0.3s;
+  box-shadow: 0 4px 15px rgba(0, 255, 204, 0.3);
 }
 
-#restart-button:hover {
-  background: #00d4aa;
-  transform: scale(1.05);
-  box-shadow: 0 0 20px rgba(0, 255, 204, 0.5);
+#restart-button:hover, #new-seed-button:hover {
+  background: linear-gradient(135deg, #00d4aa 0%, #00ffcc 100%);
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(0, 255, 204, 0.5);
+}
+
+#new-seed-button {
+  background: linear-gradient(135deg, #748ffc 0%, #5c7cfa 100%);
+  box-shadow: 0 4px 15px rgba(116, 143, 252, 0.3);
+}
+
+#new-seed-button:hover {
+  background: linear-gradient(135deg, #5c7cfa 0%, #748ffc 100%);
+  box-shadow: 0 6px 20px rgba(116, 143, 252, 0.5);
 }
 
 /* Debug Panel */
@@ -210,13 +311,16 @@ body {
   position: fixed;
   top: 20px;
   right: 20px;
-  background: rgba(26, 31, 46, 0.95);
+  background: rgba(26, 31, 46, 0.98);
   border: 2px solid #ffcc00;
-  border-radius: 4px;
+  border-radius: 6px;
   padding: 15px;
-  max-width: 300px;
+  max-width: 320px;
+  max-height: 80vh;
+  overflow-y: auto;
   font-size: 0.85em;
   z-index: 999;
+  box-shadow: 0 0 30px rgba(255, 204, 0, 0.4);
 }
 
 #debug-panel.hidden {
@@ -226,11 +330,31 @@ body {
 #debug-panel h3 {
   color: #ffcc00;
   margin-bottom: 10px;
+  text-shadow: 0 0 10px #ffcc00;
 }
 
 #debug-content div {
-  padding: 2px 0;
+  padding: 3px 0;
   color: #ccc;
+  border-bottom: 1px solid #333;
+}
+
+#run-devcheck {
+  margin-top: 10px;
+  background: #ffcc00;
+  color: #000;
+  border: none;
+  padding: 8px 15px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-weight: bold;
+  width: 100%;
+  transition: all 0.2s;
+}
+
+#run-devcheck:hover {
+  background: #ffd43b;
+  transform: scale(1.05);
 }
 
 /* Scrollbar Styling */
@@ -240,6 +364,7 @@ body {
 
 ::-webkit-scrollbar-track {
   background: #0f1419;
+  border-radius: 4px;
 }
 
 ::-webkit-scrollbar-thumb {
@@ -249,4 +374,16 @@ body {
 
 ::-webkit-scrollbar-thumb:hover {
   background: #00d4aa;
+}
+
+/* Damage number animation */
+@keyframes damageFloat {
+  0% {
+    transform: translateY(0) scale(1);
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(-40px) scale(1.2);
+    opacity: 0;
+  }
 }
